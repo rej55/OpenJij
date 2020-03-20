@@ -23,6 +23,7 @@
 #include <algorithm>
 
 #include <graph/graph.hpp>
+#include <graph/bqm/binary_quadratic_model.hpp>
 
 namespace openjij {
     namespace graph {
@@ -40,7 +41,7 @@ namespace openjij {
                     /**
                      * @brief interaction type
                      */
-                    using Interactions = std::vector<FloatType>;
+                    using Interactions = BinaryQuadraticModel<Index, FloatType>;
 
                     /**
                      * @brief float type
@@ -100,8 +101,8 @@ namespace openjij {
                      *
                      * @param num_spins the number of spins
                      */
-                    explicit Dense(std::size_t num_spins)
-                        : Graph(num_spins), _J(num_spins*(num_spins+1)/2), _list_adj_nodes(num_spins){
+                    explicit Dense(const BinaryQuadraticModel<Index, FloatType> &bqm)
+                        : Graph(bqm.length()), _J(bqm), _list_adj_nodes(bqm.length()){
 
 
                             //initialize list_adj_nodes
@@ -143,17 +144,13 @@ namespace openjij {
                      * @return corresponding energy
                      */
                     FloatType calc_energy(const Spins& spins) const{
-                        assert(spins.size() == get_num_spins());
-                        FloatType ret = 0;
-                        for(std::size_t ind=0; ind<this->get_num_spins(); ind++){
-                            for(auto& adj_ind : _list_adj_nodes[ind]){
-                                if(ind != adj_ind)
-                                    ret += (1./2) * this->J(ind, adj_ind) * spins[ind] * spins[adj_ind];
-                                else
-                                    ret += this->h(ind) * spins[ind];
-                            }
+                        Sample<Index> sample;
+                        Index ind = 0;
+                        for(auto& it : sample)
+                        {
+                            insert_or_assign(sample, idx, spins[ind]);
                         }
-
+                        FloatType ret = _J.energy(sample);
                         return ret;
                     }
 
@@ -166,11 +163,8 @@ namespace openjij {
                      * @return J_{ij}
                      */
                     FloatType& J(Index i, Index j){
-                        assert(i < get_num_spins());
-                        assert(j < get_num_spins());
-
-                        set_adj_node(i, j);
-                        return _J[convert_index(std::min(i, j), std::max(i, j))];
+                        auto& quadratic = _J.get_quadratic();
+                        return quadratic[std::make_pair(i, j)];
                     }
 
                     /**
@@ -184,8 +178,8 @@ namespace openjij {
                     const FloatType& J(Index i, Index j) const{
                         assert(i < get_num_spins());
                         assert(j < get_num_spins());
-
-                        return _J[convert_index(std::min(i, j), std::max(i, j))];
+                        auto& quadratic = _J.get_quadratic();
+                        return quadratic[std::make_pair(i, j)];
                     }
 
                     /**
@@ -211,7 +205,8 @@ namespace openjij {
                      */
                     const FloatType& h(Index i) const{
                         assert(i < get_num_spins());
-                        return _J[convert_index(i, i)];
+                        auto& linear = _J.get_linear();
+                        return linear[i];
                     }
 
             };

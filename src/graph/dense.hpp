@@ -55,45 +55,6 @@ namespace openjij {
                      */
                     Interactions _J;
 
-
-                    /**
-                     * @brief convert index from pair (i,j) to unique value
-                     *
-                     * @param i Index i
-                     * @param j Index j
-                     *
-                     * @return converted index
-                     */
-                    inline std::size_t convert_index(Index i, Index j) const{
-                        assert(i<=j);
-                        return get_num_spins()*i-i*(i-1)/2+j-i;
-                    }
-
-                    /**
-                     * @brief the list of the indices of adjacent nodes
-                     */
-                    std::vector<Nodes> _list_adj_nodes;
-
-                    /**
-                     * @brief add adjacent node from "from" Index to "to" Index
-                     *
-                     * @param from "from" Index
-                     * @param to "to" Index
-                     */
-                    inline void set_adj_node(Index from, Index to){
-                        assert(from < this->get_num_spins());
-                        assert(to < this->get_num_spins());
-
-                        //get adjacent nodes of node "from"
-                        Nodes& nodes = _list_adj_nodes[from];
-                        //check if the node "to" exists in the nodes 
-                        if(std::find(nodes.begin(), nodes.end(), to)==nodes.end()){
-                            //add node
-                            nodes.push_back(to);
-                            //add node from "to" to "from"
-                            set_adj_node(to, from);
-                        }
-                    }
                 public:
 
                     /**
@@ -102,15 +63,13 @@ namespace openjij {
                      * @param num_spins the number of spins
                      */
                     explicit Dense(const BinaryQuadraticModel<Index, FloatType> &bqm)
-                        : Graph(bqm.length()), _J(bqm), _list_adj_nodes(bqm.length()){
-
-
-                            //initialize list_adj_nodes
-                            for(auto& elem : _list_adj_nodes){
-                                elem.reserve(num_spins);
-                            }
+                        : Graph(bqm.length()), _J(bqm){
                         }
 
+                    explicit Dense(const std::size_t num_spins)
+                        : Graph(num_spins), _J({}, {}, 0.0, Vartype::SPIN, ""){
+
+                        }
 
                     /**
                      * @brief Dense copy constructor
@@ -146,9 +105,9 @@ namespace openjij {
                     FloatType calc_energy(const Spins& spins) const{
                         Sample<Index> sample;
                         Index ind = 0;
-                        for(auto& it : sample)
+                        for(auto ind = 0; ind < _num_spins; ++ind)
                         {
-                            insert_or_assign(sample, idx, spins[ind]);
+                            insert_or_assign(sample, ind, spins[ind]);
                         }
                         FloatType ret = _J.energy(sample);
                         return ret;
@@ -163,7 +122,13 @@ namespace openjij {
                      * @return J_{ij}
                      */
                     FloatType& J(Index i, Index j){
+                        assert(i < get_num_spins());
+                        assert(j < get_num_spins());
                         auto& quadratic = _J.get_quadratic();
+                        if(quadratic.count(std::make_pair(i, j))==0)
+                        {
+                            _J.add_interaction(i, j, 0.0, Vartype::SPIN);
+                        }
                         return quadratic[std::make_pair(i, j)];
                     }
 
@@ -192,8 +157,12 @@ namespace openjij {
                     FloatType& h(Index i){
                         assert(i < get_num_spins());
                         //add node if it does not exist
-                        set_adj_node(i, i);
-                        return _J[convert_index(i, i)];
+                        auto& linear = _J.get_linear();
+                        if(linear.count(i)==0)
+                        {
+                            _J.add_variable(i, 0.0, Vartype::SPIN);
+                        }
+                        return linear[i];
                     }
 
                     /**
